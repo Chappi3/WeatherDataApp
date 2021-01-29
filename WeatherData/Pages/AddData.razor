@@ -1,0 +1,56 @@
+﻿@page "/adddata"
+@using WeatherData.Services
+@inject IAddDataService AddDataService
+
+<div class="row">
+    <div class="col">
+        <h1>Add Data</h1>
+        <p>The data format in the file needs to be like this: Date,Thermometer,Temperature,Humidity</p>
+        <div class="input-group mb-3 col-4">
+            <InputFile OnChange="@OnInputFileChange" accept=".csv" />
+        </div>
+    </div>
+</div>
+
+@if (loading)
+{
+    <div class="d-flex justify-content-center">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden"></span>
+        </div>
+    </div>
+}
+
+@if (response != string.Empty)
+{
+    <h4>Response</h4>
+
+    @if (response == "Success!")
+    {
+        <span class="badge bg-success">@response</span>
+    }
+    else
+    {
+        <span class="badge bg-danger">@response</span>
+    }
+}
+
+@code {
+    private bool loading = false;
+    private string response = string.Empty;
+
+    private async Task OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        loading = true;
+        var isSuccessfull = await AddDataService.ConvertAndAdd(e.File);
+        loading = false;
+        if (isSuccessfull)
+        {
+            response = "Success!";
+        }
+        else
+        {
+            response = "Failed!";
+        }
+    }
+}

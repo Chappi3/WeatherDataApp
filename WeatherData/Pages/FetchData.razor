@@ -1,0 +1,265 @@
+﻿@page "/fetchdata"
+
+@using WeatherData.Services
+@using WeatherData.Models
+@inject IFetchDataService FetchDataService
+
+<div class="row">
+    <div class="col-md-6">
+        <h1>Fetch Data</h1>
+        <p>This component demonstrates fetching data from a service.</p>
+
+        <div class="row">
+            <div class="col">
+                <label class="mb-2 mt-2">Thermometer</label>
+                <select class="form-select" @onchange="SelectThermometer">
+                    <option selected value="Inne">Inne</option>
+                    <option value="Ute">Ute</option>
+                </select>
+                @if (showAvgTemp)
+                {
+                    <label class="ml-4 mb-2 mt-2">Date</label>
+                    <input class="form-select" type="date" min="2016-05-31" max="2017-01-10" @onchange="DateChanged">
+                }
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-primary m-2" @onclick="ToggleOrderByList">All average by day</button>
+        <button type="button" class="btn btn-primary m-2" @onclick="ToggleAvgTemp">Average Temperature</button>
+
+    </div>
+    @if (showOrderByList && temperatureReadings != null && selectedThermometer == "Ute")
+    {
+        <div class="col-md-6">
+            <div class="card-group">
+                <div class="card mb-3">
+                    <div class="card-header">Meteorological autumn</div>
+                    <div class="card-body">
+                        @if (meteroAutumnDate != string.Empty)
+                        {
+                            <p class="card-text">Meteorological autumn started @meteroAutumnDate.</p>
+                        }
+                        else
+                        {
+                            <p class="card-text">No meteorological autumn found.</p>
+                        }
+                    </div>
+                </div>
+                <div class="card mb-3">
+                    <div class="card-header">Meteorological winter</div>
+                    <div class="card-body">
+                        @if (meteroWinterDate != string.Empty)
+                        {
+                            <p class="card-text">Meteorological winter started @meteroWinterDate.</p>
+                        }
+                        else
+                        {
+                            <p class="card-text">No meteorological winter found.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (showAvgTemp && selectedDate != string.Empty)
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="text-primary">Date</th>
+                <th class="text-primary">Average Temperature &#8451;</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>@selectedDate</td>
+                <td>@averageTempByDate &#8451;</td>
+            </tr>
+        </tbody>
+    </table>
+}
+
+@if (showOrderByList)
+{
+    @if (temperatureReadings != null)
+    {
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th><button class="btn btn-link" @onclick="SortByDate">Date</button></th>
+                    <th><button class="btn btn-link" @onclick="SortByTemperature">Average Temperature &#8451;</button></th>
+                    <th><button class="btn btn-link" @onclick="SortByHumidity">Average Humidity %</button></th>
+                    <th><button class="btn btn-link" @onclick="SortByMold">Mold Risk %</button></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var tempReading in temperatureReadings.Where(t => t.Thermometer == selectedThermometer))
+                {
+                    <tr>
+                        <td>@tempReading.Date.ToShortDateString()</td>
+                        <td>@Math.Round(tempReading.AverageTemperature, 1) &#8451;</td>
+                        <td>@tempReading.AverageHumidity %</td>
+                        <td>@tempReading.MoldRisk %</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <div class="d-flex justify-content-center m-3">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden"></span>
+            </div>
+        </div>
+    }
+}
+
+@code
+{
+    private List<TemperatureReadingModel> temperatureReadings = null;
+    private bool showAvgTemp, showOrderByList, orderAvgTemp, orderAvgHumid, orderMold, orderDate;
+    private string selectedThermometer = "Inne", selectedDate = string.Empty;
+    private string meteroAutumnDate = string.Empty, meteroWinterDate = string.Empty;
+    private double averageTempByDate = 0;
+
+    private void DateChanged(ChangeEventArgs e)
+    {
+        selectedDate = (string)e.Value;
+        averageTempByDate = FetchDataService.FetchAverageTempOnDateChanged(selectedDate, selectedThermometer);
+    }
+
+    private void ToggleAvgTemp()
+    {
+        showAvgTemp = !showAvgTemp;
+        showOrderByList = false;
+    }
+
+    private void SelectThermometer(ChangeEventArgs e)
+    {
+        selectedThermometer = (string)e.Value;
+
+        if (selectedDate != string.Empty && showAvgTemp)
+        {
+            averageTempByDate = FetchDataService.FetchAverageTempOnDateChanged(selectedDate, selectedThermometer);
+        }
+    }
+
+    private async Task ToggleOrderByList()
+    {
+        showAvgTemp = false;
+        showOrderByList = !showOrderByList;
+
+        if (temperatureReadings == null)
+        {
+            temperatureReadings = await FetchDataService.FetchData();
+            CalcMetreoAutumn();
+            CalcMetreoWinter();
+        }
+    }
+
+    /// <summary>
+    /// Uträkning för metreologisk vinter
+    /// </summary>
+    private void CalcMetreoWinter()
+    {
+        var calcList = temperatureReadings.Where(t => t.Thermometer == "Ute").OrderBy(t => t.Date).ToList();
+
+        for (int i = 0; i < calcList.Count; i++)
+        {
+            if (calcList[i].AverageTemperature <= 0 && i + 4 < calcList.Count)
+            {
+                if (calcList[i + 1].AverageTemperature <= 0 &&
+                    calcList[i + 2].AverageTemperature <= 0 &&
+                    calcList[i + 3].AverageTemperature <= 0 &&
+                    calcList[i + 4].AverageTemperature <= 0)
+                {
+                    meteroWinterDate = calcList[i].Date.ToShortDateString();
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Uträkning för metreologisk höst
+    /// </summary>
+    private void CalcMetreoAutumn()
+    {
+        var calcList = temperatureReadings.Where(t => t.Thermometer == "Ute").OrderBy(t => t.Date).ToList();
+
+        for (int i = 0; i < calcList.Count; i++)
+        {
+            if ((calcList[i].AverageTemperature < 10 && calcList[i].AverageTemperature > 0) && i + 4 < calcList.Count)
+            {
+                if ((calcList[i + 1].AverageTemperature < 10 && calcList[i + 1].AverageTemperature > 0) &&
+                    (calcList[i + 2].AverageTemperature < 10 && calcList[i + 2].AverageTemperature > 0) &&
+                    (calcList[i + 3].AverageTemperature < 10 && calcList[i + 3].AverageTemperature > 0) &&
+                    (calcList[i + 4].AverageTemperature < 10 && calcList[i + 4].AverageTemperature > 0))
+                {
+                    meteroAutumnDate = calcList[i].Date.ToShortDateString();
+                    break;
+                }
+            }
+        }
+    }
+
+    private void SortByDate()
+    {
+        orderDate = !orderDate;
+
+        if (orderDate)
+        {
+            temperatureReadings = temperatureReadings.OrderBy(t => t.Date).ToList();
+        }
+        else if (!orderDate)
+        {
+            temperatureReadings = temperatureReadings.OrderByDescending(t => t.Date).ToList();
+        }
+    }
+
+    private void SortByTemperature()
+    {
+        orderAvgTemp = !orderAvgTemp;
+
+        if (orderAvgTemp)
+        {
+            temperatureReadings = temperatureReadings.OrderBy(t => t.AverageTemperature).ToList();
+        }
+        else if (!orderAvgTemp)
+        {
+            temperatureReadings = temperatureReadings.OrderByDescending(t => t.AverageTemperature).ToList();
+        }
+
+    }
+
+    private void SortByHumidity()
+    {
+        orderAvgHumid = !orderAvgHumid;
+
+        if (orderAvgHumid)
+        {
+            temperatureReadings = temperatureReadings.OrderBy(t => t.AverageHumidity).ToList();
+        }
+        else if (!orderAvgHumid)
+        {
+            temperatureReadings = temperatureReadings.OrderByDescending(t => t.AverageHumidity).ToList();
+        }
+    }
+
+    private void SortByMold()
+    {
+        orderMold = !orderMold;
+
+        if (orderMold)
+        {
+            temperatureReadings = temperatureReadings.OrderBy(t => t.MoldRisk).ToList();
+        }
+        else if (!orderMold)
+        {
+            temperatureReadings = temperatureReadings.OrderByDescending(t => t.MoldRisk).ToList();
+        }
+    }
+}
